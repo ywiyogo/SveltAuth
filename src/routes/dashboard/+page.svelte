@@ -69,6 +69,7 @@
 	});
 
 	function logout() {
+		loading = true;
 		post('/logout', {}).finally(() => {
 			localStorage.clear();
 			session.set(null);
