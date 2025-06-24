@@ -12,7 +12,9 @@ const FORWARD_REQUEST_HEADERS = [
 	'accept-language',
 	'accept-encoding',
 	'x-forwarded-for',
-	'x-real-ip'
+	'x-real-ip',
+	'origin',
+	'cookie'
 ];
 
 // Headers to forward from the backend response to the client
@@ -31,6 +33,8 @@ export async function proxyToBackend(
 	endpoint: string
 ): Promise<Response> {
 	try {
+		const backendUrl = getBackendUrl();
+
 		// Build headers to forward to backend
 		const forwardHeaders: Record<string, string> = {
 			'Content-Type': 'application/json'
@@ -56,7 +60,7 @@ export async function proxyToBackend(
 		}
 
 		// Make request to backend
-		const backendResponse = await fetch(`${BACKEND_URL}${endpoint}`, {
+		const backendResponse = await fetch(`${backendUrl}${endpoint}`, {
 			method: method.toUpperCase(),
 			headers: forwardHeaders,
 			body
@@ -65,15 +69,25 @@ export async function proxyToBackend(
 		// Get response data
 		let responseData;
 		const contentType = backendResponse.headers.get('content-type');
+		const responseText = await backendResponse.text();
 
 		if (contentType && contentType.includes('application/json')) {
 			try {
-				responseData = await backendResponse.json();
+				responseData = JSON.parse(responseText);
 			} catch (error) {
-				responseData = { error: 'Invalid JSON response from backend' };
+				responseData = { error: 'Invalid JSON response from backend', body: responseText };
 			}
 		} else {
-			responseData = { message: 'Non-JSON response from backend' };
+			// Handle non-JSON responses by trying to parse as JSON anyway
+			try {
+				responseData = JSON.parse(responseText);
+			} catch (error) {
+				responseData = {
+					message: 'Non-JSON response from backend',
+					body: responseText,
+					contentType: contentType || 'unknown'
+				};
+			}
 		}
 
 		// Build response headers to forward to client
